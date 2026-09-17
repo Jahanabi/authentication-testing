@@ -1,0 +1,20 @@
+{
+  "happyprancer": {
+    "id": "happyprancer",
+    "label": "HappyPrancer",
+    "loginUrl": "https://beta.happyprancer.com/login",
+    "signupUrl": "https://beta.happyprancer.com/signup"
+  },
+  "bworkz": {
+    "id": "bworkz",
+    "label": "Bworkz",
+    "loginUrl": "https://beta.bworkz.com/login",
+    "signupUrl": "https://beta.bworkz.com/signup"
+  },
+  "awsaiapp": {
+    "id": "awsaiapp",
+    "label": "AWSAIAPP",
+    "loginUrl": "https://beta.awsaiapp.com/login",
+    "signupUrl": "https://beta.awsaiapp.com/signup"
+  }
+}

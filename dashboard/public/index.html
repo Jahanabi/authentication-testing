@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Authentication Test Console</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">Playwright authentication suite</p>
+        <h1>Login / Signup test console</h1>
+        <p class="lede">
+          Choose an institution and run the full authentication suite
+          (42 cases: LOGIN-001 to LOGIN-020 and SIGNUP-001 to SIGNUP-022).
+        </p>
+      </header>
+
+      <section class="panel">
+        <label class="field">
+          <span>Institution</span>
+          <select id="institution"></select>
+        </label>
+
+        <label class="field">
+          <span>Module</span>
+          <select id="module">
+            <<option value="all">All Login + Signup Cases (42)</option>
+            <option value="login">All Login Cases (LOGIN-001 to LOGIN-020)</option>
+           <option value="signup">All Signup Cases (SIGNUP-001 to SIGNUP-022)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Devices</span>
+          <select id="project">
+            <option value="">All devices (Desktop, Tablet, Mobile)</option>
+            <option value="Desktop Chrome">Desktop Chrome only</option>
+          </select>
+        </label>
+
+        <div class="urls" id="urls"></div>
+        <div class="config-status" id="configStatus"></div>
+
+        <div class="actions">
+          <button id="runLocal" type="button">Run tests</button>
+          <button id="runGithub" type="button" class="ghost" hidden>
+            Trigger GitHub workflow
+          </button>
+        </div>
+      </section>
+
+      <section class="status-row">
+        <article class="stat">
+          <span>Status</span>
+          <strong id="status">Idle</strong>
+        </article>
+        <article class="stat">
+          <span>Results</span>
+          <strong id="results">Not run yet</strong>
+        </article>
+        <article class="stat">
+          <span>HTML report</span>
+          <a id="htmlReport" href="#" hidden>Open report</a>
+          <strong id="htmlEmpty">Not generated yet</strong>
+        </article>
+        <article class="stat">
+          <span>Excel report</span>
+          <a id="excelReport" href="#" hidden>Download</a>
+          <strong id="excelEmpty">Not generated yet</strong>
+        </article>
+      </section>
+
+      <section class="console-panel">
+        <div class="console-head">
+          <h2>Live output</h2>
+          <span id="githubNote"></span>
+        </div>
+        <pre id="logs">Select an institution and run tests.</pre>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

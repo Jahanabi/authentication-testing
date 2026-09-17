@@ -1,0 +1,22 @@
+{
+  "name": "login-signup-auth-tests",
+  "scripts": {
+    "dashboard": "node dashboard/server.js",
+    "test:login": "node scripts/run-auth-tests.js --module login",
+    "test:signup": "node scripts/run-auth-tests.js --module signup",
+    "test:auth": "node scripts/run-auth-tests.js --module all",
+    "test:institution": "node scripts/run-auth-tests.js",
+    "report:login": "playwright show-report reports/html",
+    "report:excel": "node generate-excel-report.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^26.4.1",
+    "dotenv": "^17.4.2",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2"
+  }
+}

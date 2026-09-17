@@ -1,0 +1,147 @@
+name: Authentication tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      institution:
+        description: Institution to test
+        required: true
+        type: choice
+        options:
+          - happyprancer
+          - bworkz
+          - awsaiapp
+        default: happyprancer
+      module:
+        description: Authentication module
+        required: true
+        type: choice
+        options:
+          - all
+          - login
+          - signup
+        default: all
+      project:
+        description: Playwright project (leave empty to run Desktop, Tablet, and Mobile)
+        required: false
+        type: string
+        default: ''
+      dashboard_url:
+        description: Optional dashboard URL to include in the summary
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: auth-tests
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run authentication tests
+        env:
+          LOGIN_EMAIL: ${{ secrets.LOGIN_EMAIL }}
+          LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
+          SIGNUP_NAME: ${{ secrets.SIGNUP_NAME }}
+          SIGNUP_EMAIL: ${{ secrets.SIGNUP_EMAIL }}
+          SIGNUP_PHONE: ${{ secrets.SIGNUP_PHONE }}
+          SIGNUP_PASSWORD: ${{ secrets.SIGNUP_PASSWORD }}
+          SIGNUP_CONFIRM_PASSWORD: ${{ secrets.SIGNUP_CONFIRM_PASSWORD }}
+          SIGNUP_REFERRAL_CODE: ${{ secrets.SIGNUP_REFERRAL_CODE }}
+          HAPPYPRANCER_LOGIN_URL: ${{ secrets.HAPPYPRANCER_LOGIN_URL }}
+          HAPPYPRANCER_SIGNUP_URL: ${{ secrets.HAPPYPRANCER_SIGNUP_URL }}
+          HAPPYPRANCER_LOGIN_EMAIL: ${{ secrets.HAPPYPRANCER_LOGIN_EMAIL }}
+          HAPPYPRANCER_LOGIN_PASSWORD: ${{ secrets.HAPPYPRANCER_LOGIN_PASSWORD }}
+          BWORKZ_LOGIN_URL: ${{ secrets.BWORKZ_LOGIN_URL }}
+          BWORKZ_SIGNUP_URL: ${{ secrets.BWORKZ_SIGNUP_URL }}
+          BWORKZ_LOGIN_EMAIL: ${{ secrets.BWORKZ_LOGIN_EMAIL }}
+          BWORKZ_LOGIN_PASSWORD: ${{ secrets.BWORKZ_LOGIN_PASSWORD }}
+          AWSAIAPP_LOGIN_URL: ${{ secrets.AWSAIAPP_LOGIN_URL }}
+          AWSAIAPP_SIGNUP_URL: ${{ secrets.AWSAIAPP_SIGNUP_URL }}
+          AWSAIAPP_LOGIN_EMAIL: ${{ secrets.AWSAIAPP_LOGIN_EMAIL }}
+          AWSAIAPP_LOGIN_PASSWORD: ${{ secrets.AWSAIAPP_LOGIN_PASSWORD }}
+        run: |
+          ARGS=(--institution "${{ inputs.institution }}" --module "${{ inputs.module }}")
+          if [ -n "${{ inputs.project }}" ]; then
+            ARGS+=(--project "${{ inputs.project }}")
+          fi
+          node scripts/run-auth-tests.js "${ARGS[@]}"
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: reports/html
+          if-no-files-found: ignore
+
+      - name: Upload Excel report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authentication-excel-report
+          path: reports/excel
+          if-no-files-found: ignore
+
+      - name: Setup Pages
+        if: always()
+        id: pages-setup
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: reports/html
+
+      - name: Deploy report to GitHub Pages
+        if: always()
+        id: pages
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Write job summary
+        if: always()
+        id: summary
+        env:
+          PAGE_URL: ${{ steps.pages.outputs.page_url }}
+          DASHBOARD_URL: ${{ inputs.dashboard_url }}
+        run: |
+          {
+            echo "report_url=${PAGE_URL}" >> "$GITHUB_OUTPUT"
+            echo "## Authentication report" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Institution: \`${{ inputs.institution }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Module: \`${{ inputs.module }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- HTML report: ${PAGE_URL}" >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "$DASHBOARD_URL" ]; then
+              echo "- Dashboard: ${DASHBOARD_URL}" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          }

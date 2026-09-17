@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Authentication Test Application</title>
+  <link rel="stylesheet" href="/auth.css" />
+</head>
+<body>
+  <main class="card">
+    <div class="brand">Authentication Test Application</div>
+    <div class="institution" id="institutionName"></div>
+    <h1 id="title">Sign in</h1>
+    <p id="subtitle">Use the form below to test the common authentication suite.</p>
+
+    <div id="signupChooser" class="chooser" hidden>
+      <button type="button" id="emailSignup">Sign up with Email</button>
+    </div>
+
+    <form id="authForm" novalidate>
+      <div id="signupFields" hidden>
+        <label>Full Name<input id="fullName" name="fullName" type="text" autocomplete="name" /></label>
+        <label>Phone Number<input id="phone" name="phone" type="tel" autocomplete="tel" /></label>
+      </div>
+
+      <label>Email Address<input id="email" name="email" type="email" autocomplete="email" required /></label>
+      <label>Create Password<input id="password" name="password" type="password" minlength="8" required /></label>
+      <div id="confirmWrap" hidden><label>Confirm Password<input id="confirmPassword" name="confirmPassword" type="password" /></label></div>
+      <div id="referralWrap" hidden><label>Referral Code<input id="referralCode" name="referralCode" type="text" /></label></div>
+
+      <label id="roleWrap" hidden>Role<select id="role"><option value="member">Member</option><option value="admin">Admin</option></select></label>
+
+      <div id="passwordRules" class="rules">
+        <span data-rule="length">At least 8 characters</span>
+        <span data-rule="upper">Uppercase letter</span>
+        <span data-rule="lower">Lowercase letter</span>
+        <span data-rule="number">Number</span>
+        <span data-rule="special">Special character</span>
+      </div>
+
+      <div id="message" role="alert" aria-live="polite"></div>
+      <button id="submitButton" type="submit">Sign In</button>
+    </form>
+
+    <div class="links">
+      <a href="#" id="forgotPassword">Forgot Password?</a>
+      <a href="#" id="switchAuth">Sign Up</a>
+    </div>
+    <button type="button" id="googleButton" class="google">Continue with Google</button>
+  </main>
+  <script src="/auth.js"></script>
+</body>
+</html>
