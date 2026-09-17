@@ -201,7 +201,7 @@ app.post('/api/github/dispatch', async (req, res) => {
         inputs: {
           institution,
           module: moduleName,
-          project: project || 'Desktop Chrome',
+          project: project,
           dashboard_url: origin,
         },
       }),
