@@ -228,17 +228,21 @@ app.get('/', (_req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));
 });
 
-const server = app.listen(port, () => {
-  console.log(`Auth test dashboard: http://localhost:${port}`);
-});
+if (require.main === module) {
+  const server = app.listen(port, () => {
+    console.log(`Auth test dashboard: http://localhost:${port}`);
+  });
 
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(
-      `Port ${port} is already in use. Stop the other dashboard process, then run npm run dashboard again.`
-    );
-    process.exit(1);
-  }
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(
+        `Port ${port} is already in use. Stop the other dashboard process, then run npm run dashboard again.`
+      );
+      process.exit(1);
+    }
 
-  throw error;
-});
+    throw error;
+  });
+}
+
+module.exports = app;
