@@ -217,11 +217,119 @@ app.post('/api/github/dispatch', async (req, res) => {
     return;
   }
 
+  const dispatchedAt = new Date().toISOString();
+  const pagesUrl = `https://${repository.split('/')[0]}.github.io/${repository.split('/')[1]}/`;
+
   res.json({
     ok: true,
+    dispatchedAt,
+    pagesUrl,
     actionsUrl: `https://github.com/${repository}/actions/workflows/${workflow}`,
-    message: 'GitHub Actions run requested. Open the Actions tab for the generated report link.',
+    message: 'GitHub Actions started successfully. The dashboard will monitor the run automatically.',
   });
+});
+
+app.get('/api/github/status', async (req, res) => {
+  const token = process.env.GITHUB_TOKEN;
+  const repository = process.env.GITHUB_REPOSITORY;
+  const workflow = process.env.GITHUB_WORKFLOW_FILE || 'auth-tests.yml';
+  const ref = process.env.GITHUB_REF || 'main';
+  const startedAt = String(req.query.startedAt || '').trim();
+
+  if (!token || !repository) {
+    res.status(400).json({ error: 'GitHub is not configured.' });
+    return;
+  }
+
+  const startedMs = Date.parse(startedAt);
+  if (!Number.isFinite(startedMs)) {
+    res.status(400).json({ error: 'A valid startedAt timestamp is required.' });
+    return;
+  }
+
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+
+  try {
+    const runsResponse = await fetch(
+      `https://api.github.com/repos/${repository}/actions/workflows/${workflow}/runs?event=workflow_dispatch&branch=${encodeURIComponent(ref)}&per_page=10`,
+      { headers }
+    );
+
+    if (!runsResponse.ok) {
+      const details = await runsResponse.text();
+      res.status(runsResponse.status).json({
+        error: 'Unable to read GitHub Actions status.',
+        details,
+      });
+      return;
+    }
+
+    const data = await runsResponse.json();
+    const runs = Array.isArray(data.workflow_runs) ? data.workflow_runs : [];
+
+    // GitHub's dispatch endpoint does not return a run ID. Find the
+    // newest workflow_dispatch run created after this dashboard request.
+    const run = runs
+      .filter((item) => {
+        const createdMs = Date.parse(item.created_at || '');
+        return Number.isFinite(createdMs) && createdMs >= startedMs - 60000;
+      })
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+
+    if (!run) {
+      res.json({
+        status: 'queued',
+        message: 'Waiting for GitHub Actions to create the workflow run...',
+      });
+      return;
+    }
+
+    const pagesUrl = `https://${repository.split('/')[0]}.github.io/${repository.split('/')[1]}/`;
+    let summary = null;
+    let excelReportUrl = null;
+
+    if (run.status === 'completed') {
+      try {
+        const resultResponse = await fetch(
+          `${pagesUrl}auth-test-result.json?run=${run.id}`,
+          { headers: { Accept: 'application/json' } }
+        );
+
+        if (resultResponse.ok) {
+          const result = await resultResponse.json();
+          summary = result.summary || null;
+          if (result.excelReport) {
+            excelReportUrl = `${pagesUrl}excel/${encodeURIComponent(result.excelReport)}?run=${run.id}`;
+          }
+        }
+      } catch {
+        // The Pages deployment can finish a little after the workflow itself.
+      }
+    }
+
+    res.json({
+      runId: run.id,
+      status: run.status === 'completed'
+        ? (run.conclusion === 'success' ? 'completed' : 'failed')
+        : run.status,
+      conclusion: run.conclusion,
+      startedAt: run.created_at,
+      finishedAt: run.updated_at,
+      actionsUrl: run.html_url,
+      htmlReportUrl: run.status === 'completed' ? pagesUrl : null,
+      excelReportUrl,
+      summary,
+      message: run.status === 'completed'
+        ? (run.conclusion === 'success' ? 'Tests completed successfully.' : 'Tests completed with failures.')
+        : 'Playwright tests are still running...',
+    });
+  } catch (error) {
+    res.status(500).json({ error: `GitHub status check failed: ${error.message}` });
+  }
 });
 
 app.get('/', (_req, res) => {

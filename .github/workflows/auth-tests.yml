@@ -111,6 +111,57 @@ jobs:
           fi
           xvfb-run -a node scripts/run-auth-tests.js "${ARGS[@]}"
 
+      - name: Prepare dashboard result
+        if: always()
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const resultPath = path.join('test-results', 'results.json');
+          const htmlDir = path.join('reports', 'html');
+          const excelDir = path.join('reports', 'excel');
+
+          fs.mkdirSync(htmlDir, { recursive: true });
+          fs.mkdirSync(path.join(htmlDir, 'excel'), { recursive: true });
+
+          let summary = null;
+          if (fs.existsSync(resultPath)) {
+            try {
+              const data = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+              const stats = data.stats || {};
+              summary = {
+                passed: Number(stats.expected || 0),
+                failed: Number(stats.unexpected || 0),
+                skipped: Number(stats.skipped || 0),
+                flaky: Number(stats.flaky || 0),
+              };
+            } catch {}
+          }
+
+          let excelReport = null;
+          if (fs.existsSync(excelDir)) {
+            const files = fs.readdirSync(excelDir).filter((name) => name.toLowerCase().endsWith('.xlsx'));
+            if (files.length) {
+              excelReport = files[files.length - 1];
+              fs.copyFileSync(
+                path.join(excelDir, excelReport),
+                path.join(htmlDir, 'excel', excelReport)
+              );
+            }
+          }
+
+          fs.writeFileSync(
+            path.join(htmlDir, 'auth-test-result.json'),
+            JSON.stringify({
+              summary,
+              excelReport,
+              generatedAt: new Date().toISOString(),
+            }, null, 2)
+          );
+          NODE
+
       - name: Upload Playwright HTML report
         if: always()
         uses: actions/upload-artifact@v4

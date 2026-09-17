@@ -115,9 +115,63 @@ async function loadInstitutions() {
   renderUrls();
 }
 
+let githubPollTimer = null;
+
+function stopGithubPolling() {
+  if (githubPollTimer) {
+    clearTimeout(githubPollTimer);
+    githubPollTimer = null;
+  }
+}
+
+async function pollGithubRun(startedAt) {
+  try {
+    const response = await fetch(`/api/github/status?startedAt=${encodeURIComponent(startedAt)}`, {
+      cache: 'no-store',
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Unable to check GitHub Actions status.');
+    }
+
+    statusEl.textContent = data.status || 'queued';
+
+    if (data.message) {
+      logs.textContent = `\n${data.message}\n`;
+      if (data.actionsUrl) {
+        logs.textContent += `Actions: ${data.actionsUrl}\n`;
+      }
+    }
+
+    if (data.summary) {
+      resultsEl.textContent = `Passed: ${data.summary.passed}  Failed: ${data.summary.failed}  Skipped: ${data.summary.skipped}`;
+      resultsEl.parentElement.classList.toggle('fail', Number(data.summary.failed || 0) > 0);
+    }
+
+    setReport(htmlReport, htmlEmpty, data.htmlReportUrl);
+    setReport(excelReport, excelEmpty, data.excelReportUrl);
+
+    if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+      stopGithubPolling();
+      runLocal.disabled = false;
+      return;
+    }
+
+    githubPollTimer = setTimeout(() => pollGithubRun(startedAt), 5000);
+  } catch (error) {
+    logs.textContent += `\nStatus check: ${error.message}\n`;
+    githubPollTimer = setTimeout(() => pollGithubRun(startedAt), 8000);
+  }
+}
+
 runLocal.addEventListener('click', async () => {
+  stopGithubPolling();
   logs.textContent = 'Requesting GitHub Actions...\n';
-  statusEl.textContent = 'running';
+  statusEl.textContent = 'queued';
+  resultsEl.textContent = 'Waiting for test results...';
+  setReport(htmlReport, htmlEmpty, null);
+  setReport(excelReport, excelEmpty, null);
   runLocal.disabled = true;
 
   try {
@@ -138,9 +192,10 @@ runLocal.addEventListener('click', async () => {
 
     logs.textContent +=
       '\nGitHub Actions started successfully.\n' +
-      (data.actionsUrl ? `Actions: ${data.actionsUrl}\n` : '');
+      (data.actionsUrl ? `Actions: ${data.actionsUrl}\n` : '') +
+      '\nWaiting for Playwright results...\n';
 
-    statusEl.textContent = 'running';
+    pollGithubRun(data.dispatchedAt);
   } catch (error) {
     logs.textContent += `\n${error.message}\n`;
     statusEl.textContent = 'failed';
