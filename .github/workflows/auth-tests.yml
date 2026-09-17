@@ -91,7 +91,7 @@ jobs:
           if [ -n "${{ inputs.project }}" ]; then
             ARGS+=(--project "${{ inputs.project }}")
           fi
-          node scripts/run-auth-tests.js "${ARGS[@]}"
+          xvfb-run -a node scripts/run-auth-tests.js "${ARGS[@]}"
 
       - name: Upload Playwright HTML report
         if: always()
