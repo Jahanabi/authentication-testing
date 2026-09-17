@@ -116,20 +116,33 @@ async function loadInstitutions() {
 }
 
 runLocal.addEventListener('click', async () => {
-  logs.textContent = 'Starting local Playwright run...\n';
+  logs.textContent = 'Requesting GitHub Actions...\n';
   statusEl.textContent = 'running';
   runLocal.disabled = true;
 
-  const response = await fetch('/api/run-authentication', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload()),
-  });
+  try {
+    const response = await fetch('/api/github/dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload()),
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (!response.ok) {
-    logs.textContent += data.error || 'Unable to start the run.';
+    if (!response.ok) {
+      logs.textContent += data.error || 'Unable to start GitHub Actions.';
+      statusEl.textContent = 'failed';
+      runLocal.disabled = false;
+      return;
+    }
+
+    logs.textContent +=
+      '\nGitHub Actions started successfully.\n' +
+      (data.actionsUrl ? `Actions: ${data.actionsUrl}\n` : '');
+
+    statusEl.textContent = 'running';
+  } catch (error) {
+    logs.textContent += `\n${error.message}\n`;
     statusEl.textContent = 'failed';
     runLocal.disabled = false;
   }
