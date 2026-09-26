@@ -18,6 +18,11 @@ const publicDir = path.join(__dirname, 'public');
 
 let currentRun = null;
 const listeners = new Set();
+function workflowForModule(moduleName) {
+  return String(moduleName || '').toLowerCase() === 'payment'
+    ? 'payment-tests.yml'
+    : process.env.GITHUB_WORKFLOW_FILE || 'auth-tests.yml';
+}
 
 app.use(express.json());
 app.use(express.static(publicDir));
@@ -160,7 +165,7 @@ app.post(['/api/run', '/api/run-authentication'], async (req, res) => {
 app.post('/api/github/dispatch', async (req, res) => {
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY;
-  const workflow = process.env.GITHUB_WORKFLOW_FILE || 'auth-tests.yml';
+  const workflow = workflowForModule(req.body.module);
   const ref = process.env.GITHUB_REF || 'main';
 
   if (!token || !repository) {
@@ -223,6 +228,7 @@ app.post('/api/github/dispatch', async (req, res) => {
   res.json({
     ok: true,
     dispatchedAt,
+    workflow,
     pagesUrl,
     actionsUrl: `https://github.com/${repository}/actions/workflows/${workflow}`,
     message: 'GitHub Actions started successfully. The dashboard will monitor the run automatically.',
@@ -232,7 +238,13 @@ app.post('/api/github/dispatch', async (req, res) => {
 app.get('/api/github/status', async (req, res) => {
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY;
-  const workflow = process.env.GITHUB_WORKFLOW_FILE || 'auth-tests.yml';
+  const workflow =
+  req.query.workflow ||
+  process.env.GITHUB_WORKFLOW_FILE ||
+  'auth-tests.yml';
+
+const isPaymentWorkflow =
+  workflow === 'payment-tests.yml';
   const ref = process.env.GITHUB_REF || 'main';
   const startedAt = String(req.query.startedAt || '').trim();
 
@@ -294,17 +306,27 @@ app.get('/api/github/status', async (req, res) => {
 
     if (run.status === 'completed') {
       try {
-        const resultResponse = await fetch(
-          `${pagesUrl}auth-test-result.json?run=${run.id}`,
-          { headers: { Accept: 'application/json' } }
-        );
+        const resultFile = isPaymentWorkflow
+  ? 'payment/payment-test-result.json'
+  : 'auth-test-result.json';
+
+const resultResponse = await fetch(
+  `${pagesUrl}${resultFile}?run=${run.id}`,
+  {
+    headers: {
+      Accept: 'application/json',
+    },
+  }
+);
 
         if (resultResponse.ok) {
           const result = await resultResponse.json();
           summary = result.summary || null;
           if (result.excelReport) {
-            excelReportUrl = `${pagesUrl}excel/${encodeURIComponent(result.excelReport)}?run=${run.id}`;
-          }
+           excelReportUrl = isPaymentWorkflow
+          ? `${pagesUrl}payment/excel/${encodeURIComponent(result.excelReport)}?run=${run.id}`
+          : `${pagesUrl}excel/${encodeURIComponent(result.excelReport)}?run=${run.id}`;
+      }
         }
       } catch {
         // The Pages deployment can finish a little after the workflow itself.
@@ -320,7 +342,10 @@ app.get('/api/github/status', async (req, res) => {
       startedAt: run.created_at,
       finishedAt: run.updated_at,
       actionsUrl: run.html_url,
-      htmlReportUrl: run.status === 'completed' ? pagesUrl : null,
+      htmlReportUrl:
+      run.status === 'completed'
+      ? (isPaymentWorkflow ? `${pagesUrl}payment/` : pagesUrl)
+      : null,
       excelReportUrl,
       summary,
       message: run.status === 'completed'

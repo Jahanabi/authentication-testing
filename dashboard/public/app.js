@@ -51,6 +51,62 @@ function renderUrls() {
     configRow('Signup password', config.signupPassword),
   ].join('');
 }
+function updateModuleOptions() {
+  const institution = institutionSelect.value;
+  const isHappyPrancer = institution === 'happyprancer';
+
+  const currentModule = moduleSelect.value;
+
+  moduleSelect.innerHTML = `
+    <option value="all">All Login + Signup Cases (42)</option>
+    <option value="login">All Login Cases (LOGIN-001 to LOGIN-020)</option>
+    <option value="signup">All Signup Cases (SIGNUP-001 to SIGNUP-022)</option>
+    ${isHappyPrancer
+      ? '<option value="payment">HappyPrancer Payment Cases</option>'
+      : ''
+    }
+  `;
+
+  if (
+    currentModule === 'payment' &&
+    !isHappyPrancer
+  ) {
+    moduleSelect.value = 'all';
+  } else if (
+    [...moduleSelect.options].some(
+      (option) => option.value === currentModule
+    )
+  ) {
+    moduleSelect.value = currentModule;
+  }
+
+  updateProjectOptions();
+}
+
+function updateProjectOptions() {
+  const isPayment =
+    institutionSelect.value === 'happyprancer' &&
+    moduleSelect.value === 'payment';
+
+  if (isPayment) {
+    projectSelect.innerHTML = `
+      <option value="Payment Desktop Chrome">
+        Desktop Chrome only
+      </option>
+    `;
+    projectSelect.value = 'Payment Desktop Chrome';
+    return;
+  }
+
+  projectSelect.innerHTML = `
+    <option value="">
+      All devices (Desktop, Tablet, Mobile)
+    </option>
+    <option value="Desktop Chrome">
+      Desktop Chrome only
+    </option>
+  `;
+}
 
 function setReport(linkEl, emptyEl, href) {
   if (href) {
@@ -113,6 +169,7 @@ async function loadInstitutions() {
     : 'Local runs only. Add GITHUB_TOKEN and GITHUB_REPOSITORY to trigger Actions.';
 
   renderUrls();
+  updateModuleOptions();  
 }
 
 let githubPollTimer = null;
@@ -124,47 +181,90 @@ function stopGithubPolling() {
   }
 }
 
-async function pollGithubRun(startedAt) {
+async function pollGithubRun(startedAt, workflow) {
   try {
-    const response = await fetch(`/api/github/status?startedAt=${encodeURIComponent(startedAt)}`, {
-      cache: 'no-store',
+    const params = new URLSearchParams({
+      startedAt,
     });
+
+    if (workflow) {
+      params.set('workflow', workflow);
+    }
+
+    const response = await fetch(
+      `/api/github/status?${params.toString()}`,
+      {
+        cache: 'no-store',
+      }
+    );
+
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || 'Unable to check GitHub Actions status.');
+      throw new Error(
+        data.error || 'Unable to check GitHub Actions status.'
+      );
     }
 
     statusEl.textContent = data.status || 'queued';
 
     if (data.message) {
       logs.textContent = `\n${data.message}\n`;
+
       if (data.actionsUrl) {
         logs.textContent += `Actions: ${data.actionsUrl}\n`;
       }
     }
 
     if (data.summary) {
-      resultsEl.textContent = `Passed: ${data.summary.passed}  Failed: ${data.summary.failed}  Skipped: ${data.summary.skipped}`;
-      resultsEl.parentElement.classList.toggle('fail', Number(data.summary.failed || 0) > 0);
+      resultsEl.textContent =
+        `Passed: ${data.summary.passed}  ` +
+        `Failed: ${data.summary.failed}  ` +
+        `Skipped: ${data.summary.skipped}`;
+
+      resultsEl.parentElement.classList.toggle(
+        'fail',
+        Number(data.summary.failed || 0) > 0
+      );
     }
 
-    setReport(htmlReport, htmlEmpty, data.htmlReportUrl);
-    setReport(excelReport, excelEmpty, data.excelReportUrl);
+    setReport(
+      htmlReport,
+      htmlEmpty,
+      data.htmlReportUrl
+    );
 
-    if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+    setReport(
+      excelReport,
+      excelEmpty,
+      data.excelReportUrl
+    );
+
+    if (
+      data.status === 'completed' ||
+      data.status === 'failed' ||
+      data.status === 'cancelled'
+    ) {
       stopGithubPolling();
       runLocal.disabled = false;
       return;
     }
 
-    githubPollTimer = setTimeout(() => pollGithubRun(startedAt), 5000);
+    githubPollTimer = setTimeout(
+      () => pollGithubRun(startedAt, workflow),
+      5000
+    );
+
   } catch (error) {
-    logs.textContent += `\nStatus check: ${error.message}\n`;
-    githubPollTimer = setTimeout(() => pollGithubRun(startedAt), 8000);
+    logs.textContent +=
+      `\nStatus check: ${error.message}\n`;
+
+    githubPollTimer = setTimeout(
+      () => pollGithubRun(startedAt, workflow),
+      8000
+    );
   }
 }
-
 runLocal.addEventListener('click', async () => {
   stopGithubPolling();
   logs.textContent = 'Requesting GitHub Actions...\n';
@@ -195,7 +295,7 @@ runLocal.addEventListener('click', async () => {
       (data.actionsUrl ? `Actions: ${data.actionsUrl}\n` : '') +
       '\nWaiting for Playwright results...\n';
 
-    pollGithubRun(data.dispatchedAt);
+    pollGithubRun(data.dispatchedAt, data.workflow);
   } catch (error) {
     logs.textContent += `\n${error.message}\n`;
     statusEl.textContent = 'failed';
@@ -220,7 +320,11 @@ runGithub.addEventListener('click', async () => {
   }
 });
 
-institutionSelect.addEventListener('change', renderUrls);
+institutionSelect.addEventListener('change', () => {
+  renderUrls();
+  updateModuleOptions();
+});
+moduleSelect.addEventListener('change', updateProjectOptions);
 
 const events = new EventSource('/api/run/stream');
 

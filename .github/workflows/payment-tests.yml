@@ -1,0 +1,261 @@
+name: HappyPrancer Payment Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      institution:
+        description: Institution to test
+        required: true
+        type: choice
+        options:
+          - happyprancer
+        default: happyprancer
+
+      module:
+        description: Testing module
+        required: true
+        type: choice
+        options:
+          - payment
+        default: payment
+
+      project:
+        description: Playwright project
+        required: false
+        type: choice
+        options:
+          - Payment Desktop Chrome
+        default: Payment Desktop Chrome
+
+      dashboard_url:
+        description: Optional dashboard URL to include in the summary
+        required: false
+        type: string
+        default: ''
+        
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: payment-tests
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run HappyPrancer payment tests
+        env:
+          HAPPYPRANCER_BASE_URL: ${{ secrets.HAPPYPRANCER_BASE_URL }}
+          HAPPYPRANCER_LOGIN_EMAIL: ${{ secrets.HAPPYPRANCER_LOGIN_EMAIL }}
+          HAPPYPRANCER_LOGIN_PASSWORD: ${{ secrets.HAPPYPRANCER_LOGIN_PASSWORD }}
+          HAPPYPRANCER_PAYMENT_PHONE: ${{ secrets.HAPPYPRANCER_PAYMENT_PHONE }}
+          HAPPYPRANCER_PAYMENT_EMAIL: ${{ secrets.HAPPYPRANCER_PAYMENT_EMAIL }}
+
+        run: |
+          xvfb-run -a node node_modules/@playwright/test/cli.js test tests/payment.spec.ts \
+            --config=playwright.payment.config.ts \
+            --project="Payment Desktop Chrome" \
+            --workers=1
+
+      - name: Generate Excel payment report
+        if: always()
+        run: |
+          node generate-payment-excel-report.js
+
+      - name: Prepare payment dashboard result
+        if: always()
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const resultPath = path.join(
+            'test-results',
+            'payment-results.json'
+          );
+
+          const htmlDir = path.join(
+            'reports',
+            'payment-html'
+          );
+
+          const excelDir = path.join(
+            'reports',
+            'excel'
+          );
+
+          fs.mkdirSync(htmlDir, { recursive: true });
+
+          let summary = null;
+
+          if (fs.existsSync(resultPath)) {
+            try {
+              const data = JSON.parse(
+                fs.readFileSync(resultPath, 'utf8')
+              );
+
+              const stats = data.stats || {};
+
+              summary = {
+                passed: Number(stats.expected || 0),
+                failed: Number(stats.unexpected || 0),
+                skipped: Number(stats.skipped || 0),
+                flaky: Number(stats.flaky || 0)
+              };
+            } catch (error) {
+              console.error(
+                'Could not read payment-results.json:',
+                error.message
+              );
+            }
+          }
+
+          let excelReport = null;
+
+          if (fs.existsSync(excelDir)) {
+            const files = fs
+              .readdirSync(excelDir)
+              .filter(name =>
+                name.toLowerCase().endsWith('.xlsx')
+              );
+
+            if (files.length) {
+              excelReport = files[files.length - 1];
+            }
+          }
+
+          fs.writeFileSync(
+            path.join(
+              htmlDir,
+              'payment-test-result.json'
+            ),
+            JSON.stringify(
+              {
+                summary,
+                excelReport,
+                generatedAt: new Date().toISOString()
+              },
+              null,
+              2
+            )
+          );
+          NODE
+
+      - name: Upload payment HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: happyprancer-payment-html-report
+          path: reports/payment-html
+          if-no-files-found: ignore
+
+      - name: Upload payment Excel report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: happyprancer-payment-excel-report
+          path: reports/excel
+          if-no-files-found: ignore
+
+      - name: Setup Pages
+        if: always()
+        id: pages-setup
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+
+      - name: Prepare combined Pages artifact
+        if: always()
+        shell: bash
+        env:
+          PAGES_URL: ${{ steps.pages-setup.outputs.base_url }}
+        run: |
+          set -e
+
+          rm -rf reports/pages
+          mkdir -p reports/pages
+
+          echo "Pages URL: ${PAGES_URL}"
+
+          if [ -n "${PAGES_URL}" ]; then
+            echo "Downloading current GitHub Pages content..."
+
+            curl \
+              --fail \
+              --location \
+              --retry 3 \
+              --silent \
+              --show-error \
+              "${PAGES_URL}/" \
+              --output /tmp/pages-index.html || true
+          fi
+
+          if [ -f /tmp/pages-index.html ]; then
+            cp /tmp/pages-index.html reports/pages/index.html
+          fi
+
+          mkdir -p reports/pages/payment
+
+          if [ -d "reports/payment-html" ]; then
+            cp -R reports/payment-html/. reports/pages/payment/
+          fi
+
+          if [ -d "reports/excel" ]; then
+            mkdir -p reports/pages/payment/excel
+            cp -R reports/excel/. reports/pages/payment/excel/
+          fi
+
+      - name: Upload Pages artifact
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: reports/pages
+
+      - name: Deploy payment report to GitHub Pages
+        if: always()
+        id: pages
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Write job summary
+        if: always()
+        env:
+          PAGE_URL: ${{ steps.pages.outputs.page_url }}
+          DASHBOARD_URL: ${{ inputs.dashboard_url }}
+        run: |
+          echo "## HappyPrancer Payment Test Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Project: \`Payment Desktop Chrome\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Module: \`Payment\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Institution: \`HappyPrancer\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- HTML report: ${PAGE_URL}payment/" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$DASHBOARD_URL" ]; then
+            echo "- Dashboard: ${DASHBOARD_URL}" >> "$GITHUB_STEP_SUMMARY"
+          fi
