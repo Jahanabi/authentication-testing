@@ -32,7 +32,7 @@ on:
         required: false
         type: string
         default: ''
-        
+
 permissions:
   contents: read
   pages: write
@@ -191,33 +191,98 @@ jobs:
 
       - name: Prepare combined Pages artifact
         if: always()
+        id: prepare-pages
         shell: bash
         env:
-          PAGES_URL: ${{ steps.pages-setup.outputs.base_url }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          set -e
+          set -euo pipefail
 
           rm -rf reports/pages
+          rm -rf /tmp/auth-pages
           mkdir -p reports/pages
+          mkdir -p /tmp/auth-pages
 
-          echo "Pages URL: ${PAGES_URL}"
+          echo "Finding the latest completed authentication workflow..."
 
-          if [ -n "${PAGES_URL}" ]; then
-            echo "Downloading current GitHub Pages content..."
+          RUNS_JSON=$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/actions/workflows/auth-tests.yml/runs?branch=${REF_NAME}&status=completed&per_page=20")
 
-            curl \
-              --fail \
-              --location \
-              --retry 3 \
-              --silent \
-              --show-error \
-              "${PAGES_URL}/" \
-              --output /tmp/pages-index.html || true
+          RUN_IDS=$(printf '%s' "${RUNS_JSON}" | node -e '
+            let input = "";
+            process.stdin.on("data", chunk => input += chunk);
+            process.stdin.on("end", () => {
+              const data = JSON.parse(input);
+
+              for (const run of data.workflow_runs || []) {
+                if (run.status === "completed") {
+                  console.log(run.id);
+                }
+              }
+            });
+          ')
+
+          AUTH_ARTIFACT_ID=""
+
+          for RUN_ID in ${RUN_IDS}; do
+            echo "Checking authentication run: ${RUN_ID}"
+
+            ARTIFACTS_JSON=$(curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100")
+
+            ARTIFACT_ID=$(printf '%s' "${ARTIFACTS_JSON}" | node -e '
+              let input = "";
+              process.stdin.on("data", chunk => input += chunk);
+              process.stdin.on("end", () => {
+                const data = JSON.parse(input);
+
+                const artifact = (data.artifacts || []).find(
+                  item =>
+                    item.name === "playwright-html-report" &&
+                    item.expired === false
+                );
+
+                if (artifact) {
+                  console.log(artifact.id);
+                }
+              });
+            ')
+
+            if [ -n "${ARTIFACT_ID}" ]; then
+              AUTH_ARTIFACT_ID="${ARTIFACT_ID}"
+              echo "Authentication artifact found: ${AUTH_ARTIFACT_ID}"
+              break
+            fi
+          done
+
+          if [ -z "${AUTH_ARTIFACT_ID}" ]; then
+            echo "ERROR: Could not find a usable authentication HTML report artifact."
+            echo "The payment Pages deployment will not continue."
+            exit 1
           fi
 
-          if [ -f /tmp/pages-index.html ]; then
-            cp /tmp/pages-index.html reports/pages/index.html
-          fi
+          echo "Downloading authentication report artifact..."
+
+          curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -L \
+            "https://api.github.com/repos/${REPOSITORY}/actions/artifacts/${AUTH_ARTIFACT_ID}/zip" \
+            -o /tmp/auth-pages.zip
+
+          unzip -q /tmp/auth-pages.zip -d /tmp/auth-pages
+
+          echo "Restoring authentication report..."
+
+          cp -R /tmp/auth-pages/. reports/pages/
+
+          echo "Adding payment report..."
 
           mkdir -p reports/pages/payment
 
@@ -230,15 +295,19 @@ jobs:
             cp -R reports/excel/. reports/pages/payment/excel/
           fi
 
+          echo ""
+          echo "Combined Pages structure:"
+          find reports/pages -maxdepth 3 -type f | sort
+
       - name: Upload Pages artifact
-        if: always()
+        if: always() && steps.prepare-pages.outcome == 'success'
         continue-on-error: true
         uses: actions/upload-pages-artifact@v3
         with:
           path: reports/pages
 
       - name: Deploy payment report to GitHub Pages
-        if: always()
+        if: always() && steps.prepare-pages.outcome == 'success'
         id: pages
         continue-on-error: true
         uses: actions/deploy-pages@v4
