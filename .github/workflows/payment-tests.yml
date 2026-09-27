@@ -93,7 +93,7 @@ jobs:
           xvfb-run -a node node_modules/@playwright/test/cli.js test tests/payment.spec.ts \
             --config=playwright.payment.config.ts \
             --project="Payment Desktop Chrome" \
-            --workers=1
+            --workers=1\
             -g "PAYMENT-012"
 
       - name: Generate Excel payment report
