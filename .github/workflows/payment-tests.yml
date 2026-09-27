@@ -94,6 +94,7 @@ jobs:
             --config=playwright.payment.config.ts \
             --project="Payment Desktop Chrome" \
             --workers=1
+            -g "PAYMENT-012"
 
       - name: Generate Excel payment report
         if: always()
