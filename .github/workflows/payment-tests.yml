@@ -68,7 +68,7 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       
-        - name: Diagnose GitHub runner network
+      - name: Diagnose GitHub runner network
         env:
           HAPPYPRANCER_BASE_URL: ${{ secrets.HAPPYPRANCER_BASE_URL }}
         run: |
