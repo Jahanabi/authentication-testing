@@ -67,6 +67,16 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+      - name: Check HappyPrancer location
+        run: |
+          echo "Checking GitHub runner location..."
+
+          curl -s \
+            "https://ikticbkaxh.execute-api.us-east-2.amazonaws.com/dev/user/check-user-location" \
+            > location.json
+
+          echo "Location response:"
+          cat location.json
       
       - name: Diagnose GitHub runner network
         env:
