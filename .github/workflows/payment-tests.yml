@@ -68,13 +68,19 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       
-      - name: Diagnose GitHub runner network
+        - name: Diagnose GitHub runner network
+        env:
+          HAPPYPRANCER_BASE_URL: ${{ secrets.HAPPYPRANCER_BASE_URL }}
         run: |
           echo "Runner OS: $RUNNER_OS"
           echo "Runner name: $RUNNER_NAME"
           echo "Public IPv4:"
           curl -4 -s https://api.ipify.org
           echo
+          echo "HappyPrancer URL:"
+          echo "$HAPPYPRANCER_BASE_URL"
+          echo "HappyPrancer response:"
+          curl -I -L --max-time 20 "$HAPPYPRANCER_BASE_URL"
       - name: Run HappyPrancer payment tests
         env:
           HAPPYPRANCER_BASE_URL: ${{ secrets.HAPPYPRANCER_BASE_URL }}
