@@ -92,18 +92,19 @@ jobs:
 
           Write-Host ""
           Write-Host "Public IPv4:"
-          Invoke-RestMethod "https://api.ipify.org"
+          curl.exe -s https://api.ipify.org
+          Write-Host ""
 
           Write-Host ""
           Write-Host "HappyPrancer URL:"
           Write-Host $env:HAPPYPRANCER_BASE_URL
 
           Write-Host ""
-          Write-Host "HappyPrancer response:"
-          Invoke-WebRequest `
-            -Uri $env:HAPPYPRANCER_BASE_URL `
-            -Method Head `
-            -MaximumRedirection 10
+          Write-Host "HappyPrancer HTTP status:"
+          curl.exe -sS -L `
+            -o NUL `
+            -w "HTTP status: %{http_code}`n" `
+            "$env:HAPPYPRANCER_BASE_URL"
 
       - name: Run HappyPrancer payment tests
         shell: powershell
