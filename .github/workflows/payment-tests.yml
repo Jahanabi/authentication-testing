@@ -45,7 +45,8 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Your Windows PC, using your Indian internet connection
+    runs-on: [self-hosted, Windows, X64, happyprancer-india]
 
     environment:
       name: github-pages
@@ -63,35 +64,49 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        shell: powershell
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        shell: powershell
+        run: npx playwright install chromium
+
       - name: Check HappyPrancer location
+        shell: powershell
         run: |
-          echo "Checking GitHub runner location..."
+          Write-Host "Checking HappyPrancer location..."
 
-          curl -s \
-            "https://ikticbkaxh.execute-api.us-east-2.amazonaws.com/dev/user/check-user-location" \
-            > location.json
+          $response = Invoke-RestMethod `
+            "https://ikticbkaxh.execute-api.us-east-2.amazonaws.com/dev/user/check-user-location"
 
-          echo "Location response:"
-          cat location.json
-      
-      - name: Diagnose GitHub runner network
+          Write-Host "Location response:"
+          $response | ConvertTo-Json
+
+      - name: Diagnose runner network
+        shell: powershell
         env:
           HAPPYPRANCER_BASE_URL: ${{ secrets.HAPPYPRANCER_BASE_URL }}
         run: |
-          echo "Runner OS: $RUNNER_OS"
-          echo "Runner name: $RUNNER_NAME"
-          echo "Public IPv4:"
-          curl -4 -s https://api.ipify.org
-          echo
-          echo "HappyPrancer URL:"
-          echo "$HAPPYPRANCER_BASE_URL"
-          echo "HappyPrancer response:"
-          curl -I -L --max-time 20 "$HAPPYPRANCER_BASE_URL"
+          Write-Host "Runner OS: $env:RUNNER_OS"
+          Write-Host "Runner name: $env:RUNNER_NAME"
+
+          Write-Host ""
+          Write-Host "Public IPv4:"
+          Invoke-RestMethod "https://api.ipify.org"
+
+          Write-Host ""
+          Write-Host "HappyPrancer URL:"
+          Write-Host $env:HAPPYPRANCER_BASE_URL
+
+          Write-Host ""
+          Write-Host "HappyPrancer response:"
+          Invoke-WebRequest `
+            -Uri $env:HAPPYPRANCER_BASE_URL `
+            -Method Head `
+            -MaximumRedirection 10
+
       - name: Run HappyPrancer payment tests
+        shell: powershell
         env:
           HAPPYPRANCER_BASE_URL: ${{ secrets.HAPPYPRANCER_BASE_URL }}
           HAPPYPRANCER_LOGIN_EMAIL: ${{ secrets.HAPPYPRANCER_LOGIN_EMAIL }}
@@ -100,96 +115,70 @@ jobs:
           HAPPYPRANCER_PAYMENT_EMAIL: ${{ secrets.HAPPYPRANCER_PAYMENT_EMAIL }}
 
         run: |
-          xvfb-run -a node node_modules/@playwright/test/cli.js test tests/payment.spec.ts \
-            --config=playwright.payment.config.ts \
-            --project="Payment Desktop Chrome" \
-            --workers=1\
+          node node_modules/@playwright/test/cli.js test tests/payment.spec.ts `
+            --config=playwright.payment.config.ts `
+            --project="Payment Desktop Chrome" `
+            --workers=1 `
             -g "PAYMENT-012"
 
       - name: Generate Excel payment report
         if: always()
+        shell: powershell
         run: |
           node generate-payment-excel-report.js
 
       - name: Prepare payment dashboard result
         if: always()
-        shell: bash
+        shell: powershell
         run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const path = require('path');
+          $resultPath = Join-Path "test-results" "payment-results.json"
+          $htmlDir = Join-Path "reports" "payment-html"
+          $excelDir = Join-Path "reports" "excel"
 
-          const resultPath = path.join(
-            'test-results',
-            'payment-results.json'
-          );
+          New-Item -ItemType Directory -Force -Path $htmlDir | Out-Null
 
-          const htmlDir = path.join(
-            'reports',
-            'payment-html'
-          );
+          $summary = $null
 
-          const excelDir = path.join(
-            'reports',
-            'excel'
-          );
-
-          fs.mkdirSync(htmlDir, { recursive: true });
-
-          let summary = null;
-
-          if (fs.existsSync(resultPath)) {
+          if (Test-Path $resultPath) {
             try {
-              const data = JSON.parse(
-                fs.readFileSync(resultPath, 'utf8')
-              );
+              $data = Get-Content $resultPath -Raw | ConvertFrom-Json
+              $stats = $data.stats
 
-              const stats = data.stats || {};
-
-              summary = {
-                passed: Number(stats.expected || 0),
-                failed: Number(stats.unexpected || 0),
-                skipped: Number(stats.skipped || 0),
-                flaky: Number(stats.flaky || 0)
-              };
-            } catch (error) {
-              console.error(
-                'Could not read payment-results.json:',
-                error.message
-              );
+              $summary = @{
+                passed = [int]($stats.expected)
+                failed = [int]($stats.unexpected)
+                skipped = [int]($stats.skipped)
+                flaky = [int]($stats.flaky)
+              }
+            }
+            catch {
+              Write-Host "Could not read payment-results.json:"
+              Write-Host $_.Exception.Message
             }
           }
 
-          let excelReport = null;
+          $excelReport = $null
 
-          if (fs.existsSync(excelDir)) {
-            const files = fs
-              .readdirSync(excelDir)
-              .filter(name =>
-                name.toLowerCase().endsWith('.xlsx')
-              );
+          if (Test-Path $excelDir) {
+            $excelFiles = Get-ChildItem $excelDir -File |
+              Where-Object { $_.Extension -ieq ".xlsx" } |
+              Sort-Object LastWriteTime
 
-            if (files.length) {
-              excelReport = files[files.length - 1];
+            if ($excelFiles.Count -gt 0) {
+              $excelReport = $excelFiles[-1].Name
             }
           }
 
-          fs.writeFileSync(
-            path.join(
-              htmlDir,
-              'payment-test-result.json'
-            ),
-            JSON.stringify(
-              {
-                summary,
-                excelReport,
-                generatedAt: new Date().toISOString()
-              },
-              null,
-              2
-            )
-          );
-          NODE
+          $result = @{
+            summary = $summary
+            excelReport = $excelReport
+            generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+          }
+
+          $result |
+            ConvertTo-Json -Depth 10 |
+            Set-Content `
+              (Join-Path $htmlDir "payment-test-result.json")
 
       - name: Upload payment HTML report
         if: always()
@@ -216,112 +205,154 @@ jobs:
       - name: Prepare combined Pages artifact
         if: always()
         id: prepare-pages
-        shell: bash
+        shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
+
         run: |
-          set -euo pipefail
+          $ErrorActionPreference = "Stop"
 
-          rm -rf reports/pages
-          rm -rf /tmp/auth-pages
-          mkdir -p reports/pages
-          mkdir -p /tmp/auth-pages
+          $pagesDir = Join-Path $PWD "reports/pages"
+          $authDir = Join-Path $PWD "auth-pages-temp"
+          $authZip = Join-Path $PWD "auth-pages.zip"
 
-          echo "Finding the latest completed authentication workflow..."
+          if (Test-Path $pagesDir) {
+            Remove-Item $pagesDir -Recurse -Force
+          }
 
-          RUNS_JSON=$(curl -fsSL \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${REPOSITORY}/actions/workflows/auth-tests.yml/runs?branch=${REF_NAME}&status=completed&per_page=20")
+          if (Test-Path $authDir) {
+            Remove-Item $authDir -Recurse -Force
+          }
 
-          RUN_IDS=$(printf '%s' "${RUNS_JSON}" | node -e '
-            let input = "";
-            process.stdin.on("data", chunk => input += chunk);
-            process.stdin.on("end", () => {
-              const data = JSON.parse(input);
+          if (Test-Path $authZip) {
+            Remove-Item $authZip -Force
+          }
 
-              for (const run of data.workflow_runs || []) {
-                if (run.status === "completed") {
-                  console.log(run.id);
-                }
-              }
-            });
-          ')
+          New-Item -ItemType Directory -Force -Path $pagesDir | Out-Null
+          New-Item -ItemType Directory -Force -Path $authDir | Out-Null
 
-          AUTH_ARTIFACT_ID=""
+          Write-Host "Finding the latest completed authentication workflow..."
 
-          for RUN_ID in ${RUN_IDS}; do
-            echo "Checking authentication run: ${RUN_ID}"
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+          }
 
-            ARTIFACTS_JSON=$(curl -fsSL \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100")
+          $runsUrl = "https://api.github.com/repos/$env:REPOSITORY/actions/workflows/auth-tests.yml/runs?branch=$env:REF_NAME&status=completed&per_page=20"
 
-            ARTIFACT_ID=$(printf '%s' "${ARTIFACTS_JSON}" | node -e '
-              let input = "";
-              process.stdin.on("data", chunk => input += chunk);
-              process.stdin.on("end", () => {
-                const data = JSON.parse(input);
+          $runsResponse = Invoke-RestMethod `
+            -Uri $runsUrl `
+            -Headers $headers `
+            -Method Get
 
-                const artifact = (data.artifacts || []).find(
-                  item =>
-                    item.name === "playwright-html-report" &&
-                    item.expired === false
-                );
+          $authArtifactId = $null
 
-                if (artifact) {
-                  console.log(artifact.id);
-                }
-              });
-            ')
+          foreach ($run in $runsResponse.workflow_runs) {
 
-            if [ -n "${ARTIFACT_ID}" ]; then
-              AUTH_ARTIFACT_ID="${ARTIFACT_ID}"
-              echo "Authentication artifact found: ${AUTH_ARTIFACT_ID}"
+            Write-Host "Checking authentication run: $($run.id)"
+
+            $artifactsUrl = "https://api.github.com/repos/$env:REPOSITORY/actions/runs/$($run.id)/artifacts?per_page=100"
+
+            $artifactsResponse = Invoke-RestMethod `
+              -Uri $artifactsUrl `
+              -Headers $headers `
+              -Method Get
+
+            $artifact = $artifactsResponse.artifacts |
+              Where-Object {
+                $_.name -eq "playwright-html-report" -and
+                $_.expired -eq $false
+              } |
+              Select-Object -First 1
+
+            if ($artifact) {
+              $authArtifactId = $artifact.id
+
+              Write-Host "Authentication artifact found: $authArtifactId"
+
               break
-            fi
-          done
+            }
+          }
 
-          if [ -z "${AUTH_ARTIFACT_ID}" ]; then
-            echo "ERROR: Could not find a usable authentication HTML report artifact."
-            echo "The payment Pages deployment will not continue."
+          if (-not $authArtifactId) {
+            Write-Host "ERROR: Could not find a usable authentication HTML report artifact."
+            Write-Host "The payment Pages deployment will not continue."
             exit 1
-          fi
+          }
 
-          echo "Downloading authentication report artifact..."
+          Write-Host "Downloading authentication report artifact..."
 
-          curl -fsSL \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -L \
-            "https://api.github.com/repos/${REPOSITORY}/actions/artifacts/${AUTH_ARTIFACT_ID}/zip" \
-            -o /tmp/auth-pages.zip
+          $artifactUrl = "https://api.github.com/repos/$env:REPOSITORY/actions/artifacts/$authArtifactId/zip"
 
-          unzip -q /tmp/auth-pages.zip -d /tmp/auth-pages
+          Invoke-WebRequest `
+            -Uri $artifactUrl `
+            -Headers $headers `
+            -OutFile $authZip
 
-          echo "Restoring authentication report..."
+          Write-Host "Extracting authentication report..."
 
-          cp -R /tmp/auth-pages/. reports/pages/
+          Expand-Archive `
+            -Path $authZip `
+            -DestinationPath $authDir `
+            -Force
 
-          echo "Adding payment report..."
+          Write-Host "Restoring authentication report..."
 
-          mkdir -p reports/pages/payment
+          Copy-Item `
+            -Path (Join-Path $authDir "*") `
+            -Destination $pagesDir `
+            -Recurse `
+            -Force
 
-          if [ -d "reports/payment-html" ]; then
-            cp -R reports/payment-html/. reports/pages/payment/
-          fi
+          Write-Host "Adding payment report..."
 
-          if [ -d "reports/excel" ]; then
-            mkdir -p reports/pages/payment/excel
-            cp -R reports/excel/. reports/pages/payment/excel/
-          fi
+          $paymentDir = Join-Path $pagesDir "payment"
 
-          echo ""
-          echo "Combined Pages structure:"
-          find reports/pages -maxdepth 3 -type f | sort
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path $paymentDir | Out-Null
+
+          $paymentHtmlDir = Join-Path $PWD "reports/payment-html"
+
+          if (Test-Path $paymentHtmlDir) {
+            Copy-Item `
+              -Path (Join-Path $paymentHtmlDir "*") `
+              -Destination $paymentDir `
+              -Recurse `
+              -Force
+          }
+
+          $paymentExcelDir = Join-Path $PWD "reports/excel"
+
+          if (Test-Path $paymentExcelDir) {
+
+            $paymentExcelPagesDir = Join-Path $paymentDir "excel"
+
+            New-Item `
+              -ItemType Directory `
+              -Force `
+              -Path $paymentExcelPagesDir | Out-Null
+
+            Copy-Item `
+              -Path (Join-Path $paymentExcelDir "*") `
+              -Destination $paymentExcelPagesDir `
+              -Recurse `
+              -Force
+          }
+
+          Write-Host ""
+          Write-Host "Combined Pages structure:"
+
+          Get-ChildItem `
+            -Path $pagesDir `
+            -Recurse `
+            -File |
+            ForEach-Object {
+              Write-Host $_.FullName
+            }
 
       - name: Upload Pages artifact
         if: always() && steps.prepare-pages.outcome == 'success'
@@ -338,17 +369,37 @@ jobs:
 
       - name: Write job summary
         if: always()
+        shell: powershell
         env:
           PAGE_URL: ${{ steps.pages.outputs.page_url }}
           DASHBOARD_URL: ${{ inputs.dashboard_url }}
         run: |
-          echo "## HappyPrancer Payment Test Report" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Project: \`Payment Desktop Chrome\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Module: \`Payment\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Institution: \`HappyPrancer\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- HTML report: ${PAGE_URL}payment/" >> "$GITHUB_STEP_SUMMARY"
+          Add-Content `
+            -Path $env:GITHUB_STEP_SUMMARY `
+            -Value "## HappyPrancer Payment Test Report"
 
-          if [ -n "$DASHBOARD_URL" ]; then
-            echo "- Dashboard: ${DASHBOARD_URL}" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          Add-Content `
+            -Path $env:GITHUB_STEP_SUMMARY `
+            -Value ""
+
+          Add-Content `
+            -Path $env:GITHUB_STEP_SUMMARY `
+            -Value "- Project: ``Payment Desktop Chrome``"
+
+          Add-Content `
+            -Path $env:GITHUB_STEP_SUMMARY `
+            -Value "- Module: ``Payment``"
+
+          Add-Content `
+            -Path $env:GITHUB_STEP_SUMMARY `
+            -Value "- Institution: ``HappyPrancer``"
+
+          Add-Content `
+            -Path $env:GITHUB_STEP_SUMMARY `
+            -Value "- HTML report: $env:PAGE_URL`payment/"
+
+          if ($env:DASHBOARD_URL) {
+            Add-Content `
+              -Path $env:GITHUB_STEP_SUMMARY `
+              -Value "- Dashboard: $env:DASHBOARD_URL"
+          }
