@@ -356,16 +356,16 @@ jobs:
             }
 
       - name: Upload Pages artifact
-        if: always() && steps.prepare-pages.outcome == 'success'
-        continue-on-error: true
+        if: steps.prepare-pages.outcome == 'success'
+        id: upload-pages
         uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages
           path: reports/pages
 
       - name: Deploy payment report to GitHub Pages
-        if: always() && steps.prepare-pages.outcome == 'success'
+        if: steps.prepare-pages.outcome == 'success' && steps.upload-pages.outcome == 'success'
         id: pages
-        continue-on-error: true
         uses: actions/deploy-pages@v4
 
       - name: Write job summary
