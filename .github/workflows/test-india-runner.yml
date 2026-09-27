@@ -1,0 +1,31 @@
+name: Test Indian Self Hosted Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-location:
+    runs-on: [self-hosted, Windows, X64, happyprancer-india]
+
+    steps:
+      - name: Check runner
+        shell: powershell
+        run: |
+          Write-Host "Running on self-hosted Windows runner"
+          Write-Host "Computer: $env:COMPUTERNAME"
+
+      - name: Check public IP
+        shell: powershell
+        run: |
+          Write-Host "Public IP:"
+          (Invoke-RestMethod "https://api.ipify.org")
+          Write-Host ""
+
+      - name: Check HappyPrancer location
+        shell: powershell
+        run: |
+          Write-Host "HappyPrancer location:"
+          $response = Invoke-RestMethod `
+            "https://ikticbkaxh.execute-api.us-east-2.amazonaws.com/dev/user/check-user-location"
+
+          $response | ConvertTo-Json
