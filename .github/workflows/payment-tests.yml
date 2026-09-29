@@ -354,7 +354,23 @@ jobs:
             ForEach-Object {
               Write-Host $_.FullName
             }
+      - name: Use GNU tar for GitHub Pages
+        if: always() && steps.prepare-pages.outcome == 'success'
+        shell: powershell
+        run: |
+          $gitBin = "C:\Program Files\Git\bin"
 
+          if (-not (Test-Path "$gitBin\tar.exe")) {
+            Write-Host "ERROR: GNU tar was not found at $gitBin\tar.exe"
+            exit 1
+          }
+
+          Write-Host "Using GNU tar:"
+          & "$gitBin\tar.exe" --version
+
+          Add-Content $env:GITHUB_PATH $gitBin
+          Write-Host "Added Git bin to PATH for subsequent steps."
+      
       - name: Upload Pages artifact
         if: always() && steps.prepare-pages.outcome == 'success'
         id: upload-pages
@@ -362,6 +378,7 @@ jobs:
         with:
           name: github-pages
           path: reports/pages
+          
       - name: Deploy payment report to GitHub Pages
         if: always() && steps.prepare-pages.outcome == 'success' && steps.upload-pages.outcome == 'success'
         id: pages
