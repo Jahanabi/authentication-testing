@@ -358,7 +358,7 @@ jobs:
         if: always() && steps.prepare-pages.outcome == 'success'
         shell: powershell
         run: |
-          $gitBin = "C:\Program Files\Git\bin"
+          $gitBin = "C:\Program Files\Git\usr\bin"
 
           if (-not (Test-Path "$gitBin\tar.exe")) {
             Write-Host "ERROR: GNU tar was not found at $gitBin\tar.exe"
@@ -369,7 +369,7 @@ jobs:
           & "$gitBin\tar.exe" --version
 
           Add-Content $env:GITHUB_PATH $gitBin
-          Write-Host "Added Git bin to PATH for subsequent steps."
+          Write-Host "Added Git usr bin to PATH for subsequent steps."
       
       - name: Upload Pages artifact
         if: always() && steps.prepare-pages.outcome == 'success'
