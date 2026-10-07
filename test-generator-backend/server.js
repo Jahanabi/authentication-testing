@@ -1041,13 +1041,12 @@ app.post(
    START
 ============================================================ */
 
-app.listen(
-  PORT,
-  () => {
-
+if (require.main === module) {
+  app.listen(PORT, () => {
     console.log(
       `Test Generator Backend running on http://localhost:${PORT}`
     );
+  });
+}
 
-  }
-);
+module.exports = app;
