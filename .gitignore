@@ -4,3 +4,5 @@ test-results/
 playwright-report/
 reports/
 .vercel/
+test-generator-backend/.env
+test-generator-backend/node_modules/

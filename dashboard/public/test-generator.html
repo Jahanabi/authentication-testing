@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Test Case Generator</title>
+
+  <link rel="stylesheet" href="/test-generator.css" />
+</head>
+
+<body>
+
+  <main class="generator-shell">
+
+    <!-- Header -->
+    <header class="generator-header">
+
+      <div>
+        <p class="eyebrow">AI TEST AUTOMATION</p>
+
+        <h1>Business Logic → Test Case Generator</h1>
+
+        <p class="subtitle">
+          Convert business requirements, business logic, PDFs, and images
+          into structured software test cases.
+        </p>
+      </div>
+
+      <div class="header-actions">
+        <a href="/" class="nav-button secondary">
+          ← Test Console
+        </a>
+
+      </div>
+
+    </header>
+
+
+    <!-- Input Section -->
+    <section class="panel">
+
+      <div class="section-title">
+        <div>
+          <h2>Business Logic</h2>
+          <p>
+            Enter the business logic or requirement that you want to convert
+            into test cases.
+          </p>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Business Logic / Requirement</span>
+
+        <textarea
+          id="businessLogic"
+          rows="10"
+          placeholder="Example:
+
+Users should be able to register using a valid email address and password.
+The password must contain at least 8 characters.
+Users should receive an error message for an invalid email.
+An existing email should not be allowed to register again."
+        ></textarea>
+      </label>
+
+
+      <!-- File Upload -->
+      <div class="upload-section">
+
+        <label class="upload-label">
+          Supporting Documents / Images
+        </label>
+
+        <div
+          id="dropZone"
+          class="drop-zone"
+        >
+
+          <input
+            id="fileInput"
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.webp,.gif"
+            multiple
+            hidden
+          />
+
+          <div class="upload-icon">↑</div>
+
+          <h3>Upload business requirements</h3>
+
+          <p>
+            Drag & drop files here or
+            <button
+              id="browseButton"
+              type="button"
+              class="browse-button"
+            >
+              browse
+            </button>
+          </p>
+
+          <small>
+            Supported: PDF, PNG, JPG, JPEG, WEBP, GIF
+          </small>
+
+          <small>
+            Maximum 5 files
+          </small>
+
+        </div>
+
+        <div id="fileList" class="file-list"></div>
+
+      </div>
+
+
+      <!-- Configuration -->
+      <div class="configuration-grid">
+
+        <label class="field">
+          <span>Module</span>
+
+          <select id="module">
+            <option value="authentication">
+              Authentication
+            </option>
+
+            <option value="payment">
+              Payment
+            </option>
+
+            <option value="subscription">
+              Subscription
+            </option>
+
+            <option value="general">
+              General
+            </option>
+          </select>
+        </label>
+
+
+        <label class="field">
+          <span>Coverage</span>
+
+          <select id="coverage">
+
+            <option value="general">
+              General
+            </option>
+
+            <option value="functional">
+              Functional Only
+            </option>
+
+            <option value="comprehensive">
+              Comprehensive
+            </option>
+
+            <option value="functional-security">
+              Functional + Security
+            </option>
+
+          </select>
+        </label>
+
+
+        <label class="field">
+          <span>Target Test Cases</span>
+
+          <select id="caseCount">
+
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="75">75</option>
+            <option value="100">100</option>
+            <option value="150">150</option>
+            <option value="200">200</option>
+
+          </select>
+        </label>
+
+      </div>
+
+
+      <!-- Actions -->
+      <div class="generator-actions">
+
+        <button
+          id="generateButton"
+          type="button"
+          class="primary-button"
+        >
+          Generate Test Cases
+        </button>
+
+        <button
+          id="clearButton"
+          type="button"
+          class="secondary-button"
+        >
+          Clear
+        </button>
+
+      </div>
+
+
+      <!-- Status -->
+      <div
+        id="status"
+        class="status"
+        role="status"
+        aria-live="polite"
+      ></div>
+
+    </section>
+
+
+    <!-- Results -->
+    <section
+      id="resultSection"
+      class="panel results-panel"
+      hidden
+    >
+
+      <div class="results-header">
+
+        <div>
+          <h2>Generated Test Cases</h2>
+
+          <p id="summary"></p>
+        </div>
+
+        <button
+          id="downloadCsv"
+          type="button"
+          class="secondary-button"
+        >
+          Download CSV
+        </button>
+
+      </div>
+
+
+      <!-- Business Rules -->
+      <div class="rules-container">
+
+        <h3>Identified Business Rules</h3>
+
+        <ul id="businessRules"></ul>
+
+      </div>
+
+
+      <!-- Test Cases -->
+      <div class="table-wrapper">
+
+        <table>
+
+          <thead>
+            <tr>
+              <th>Test Case ID</th>
+              <th>Feature</th>
+              <th>Scenario</th>
+              <th>Preconditions</th>
+              <th>Objective</th>
+              <th>Steps</th>
+              <th>Expected Result</th>
+              <th>Type</th>
+              <th>Priority</th>
+            </tr>
+          </thead>
+
+          <tbody id="testCaseBody"></tbody>
+
+        </table>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <script src="/test-generator.js?v=1"></script>
+
+</body>
+</html>

@@ -202,3 +202,64 @@ pre {
     grid-template-columns: 1fr;
   }
 }
+.hero {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 30px;
+}
+
+.hero-content {
+  flex: 1;
+}
+
+.generator-nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-top: 4px;
+  padding: 11px 18px;
+
+  border: 1px solid #4f9cf9;
+  border-radius: 9px;
+
+  background: linear-gradient(135deg, #4f9cf9, #2875c7);
+  color: #ffffff;
+
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+
+  white-space: nowrap;
+
+  box-shadow: 0 6px 20px rgba(40, 117, 199, 0.28);
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.generator-nav-button:hover {
+  background: linear-gradient(135deg, #6aafff, #3285d4);
+  border-color: #6aafff;
+  box-shadow: 0 8px 25px rgba(40, 117, 199, 0.38);
+  transform: translateY(-1px);
+}
+
+.generator-nav-button:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 700px) {
+  .hero {
+    flex-direction: column;
+  }
+
+  .generator-nav-button {
+    width: 100%;
+  }
+}
