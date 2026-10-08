@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const GENERATOR_API_URL = "http://localhost:3001";
+  const GENERATOR_API_URL = "https://test-generator-backend-pi.vercel.app";
   const MAX_FILES = 5;
   const MAX_TOTAL_SIZE = 3 * 1024 * 1024;
 
