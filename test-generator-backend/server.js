@@ -11,9 +11,11 @@ const MODEL =
   process.env.TEST_GENERATOR_MODEL ||
   "gemini-3.5-flash-lite";
 
-const ALLOWED_ORIGIN =
-  process.env.ALLOWED_ORIGIN ||
-  "http://localhost:3000";
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "https://authentication-testing-d8zir4ys6-jahanabi-s-project.vercel.app",
+  "https://authentication-testing-git-feature-bu-9ec250-jahanabi-s-project.vercel.app",
+];
 
 const MAX_FILES = 5;
 const MAX_TOTAL_SIZE = 3 * 1024 * 1024;
@@ -32,10 +34,11 @@ const ALLOWED_MIME_TYPES = new Set([
 ============================================================ */
 
 app.use((req, res, next) => {
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    ALLOWED_ORIGIN
-  );
+  const origin = req.headers.origin;
+
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
 
   res.setHeader(
     "Access-Control-Allow-Methods",
@@ -54,7 +57,6 @@ app.use((req, res, next) => {
 
   next();
 });
-
 
 /* ============================================================
    JSON BODY
