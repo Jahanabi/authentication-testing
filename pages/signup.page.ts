@@ -31,7 +31,7 @@ export class SignupPage {
 
   getPasswordInput(): Locator {
     return this.page.getByRole('textbox', {
-      name: /^(?:create\s+)?password$/i,
+      name: /^(?:password|create\s+(?:new\s+)?password)$/i,
     }).first();
   }
 
