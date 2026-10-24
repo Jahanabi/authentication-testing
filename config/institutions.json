@@ -8,8 +8,8 @@
   "bworkz": {
     "id": "bworkz",
     "label": "Bworkz",
-    "loginUrl": "https://beta.bworkz.com/login",
-    "signupUrl": "https://beta.bworkz.com/signup"
+    "loginUrl": "https://bworkzlive.com/login",
+    "signupUrl": "https://bworkzlive.com/signup"
   },
   "awsaiapp": {
     "id": "awsaiapp",
