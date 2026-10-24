@@ -18,8 +18,26 @@ const publicDir = path.join(__dirname, 'public');
 
 let currentRun = null;
 const listeners = new Set();
+function normalizeModule(moduleName) {
+  return String(moduleName || 'alllogin+signup')
+    .trim()
+    .replace(/\s+/g, '+')
+    .toLowerCase();
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const recentDispatches = new Map();
+
 function workflowForModule(moduleName) {
-  return String(moduleName || '').toLowerCase() === 'payment'
+  return normalizeModule(moduleName) === 'payment'
     ? 'payment-tests.yml'
     : process.env.GITHUB_WORKFLOW_FILE || 'auth-tests.yml';
 }
@@ -94,7 +112,7 @@ app.post(['/api/run', '/api/run-authentication'], async (req, res) => {
   const institution = String(
     req.body.institutionId || req.body.institution || ''
   ).trim();
-  const moduleName = String(req.body.module || 'all').trim();
+  const moduleName = normalizeModule(req.body.module || 'alllogin+signup');
   const project = String(req.body.project || '').trim();
   const institutions = loadInstitutions();
 
@@ -165,7 +183,8 @@ app.post(['/api/run', '/api/run-authentication'], async (req, res) => {
 app.post('/api/github/dispatch', async (req, res) => {
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY;
-  const workflow = workflowForModule(req.body.module);
+  const moduleName = normalizeModule(req.body.module || 'alllogin+signup');
+  const workflow = workflowForModule(moduleName);
   const ref = process.env.GITHUB_REF || 'main';
 
   if (!token || !repository) {
@@ -178,7 +197,6 @@ app.post('/api/github/dispatch', async (req, res) => {
   const institution = String(
     req.body.institutionId || req.body.institution || ''
   ).trim();
-  const moduleName = String(req.body.module || 'all').trim();
   const project = String(req.body.project || '').trim();
   const institutions = loadInstitutions();
 
@@ -189,9 +207,27 @@ app.post('/api/github/dispatch', async (req, res) => {
     return;
   }
 
-  const origin = dashboardUrl(req);
+  // Server-side Idempotency: Prevent duplicate workflow dispatches on fast reloads/remounts
+  const idempotencyKey = `${institution.toLowerCase()}:${moduleName}:${project}`;
+  const now = Date.now();
+  const existing = recentDispatches.get(idempotencyKey);
+  if (existing && (now - existing.timestamp) < 45000 && !req.body.force) {
+    res.json({
+      ok: true,
+      dispatchedAt: existing.dispatchedAt,
+      workflow: existing.workflow,
+      pagesUrl: existing.pagesUrl,
+      actionsUrl: existing.actionsUrl,
+      reused: true,
+      message: 'Reconnected to ongoing GitHub Actions workflow run.',
+    });
+    return;
+  }
 
-  const response = await fetch(
+  const origin = dashboardUrl(req);
+  let targetModule = moduleName;
+
+  let response = await fetch(
     `https://api.github.com/repos/${repository}/actions/workflows/${workflow}/dispatches`,
     {
       method: 'POST',
@@ -205,13 +241,40 @@ app.post('/api/github/dispatch', async (req, res) => {
         ref,
         inputs: {
           institution,
-          module: moduleName,
+          module: targetModule,
           project: project,
           dashboard_url: origin,
         },
       }),
     }
   );
+
+  // Backward compatibility fallback: If remote branch choice validation rejects 'alllogin+signup',
+  // gracefully retry with 'all', which executes the exact same login and signup suites.
+  if (!response.ok && response.status === 422 && targetModule === 'alllogin+signup') {
+    targetModule = 'all';
+    response = await fetch(
+      `https://api.github.com/repos/${repository}/actions/workflows/${workflow}/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ref,
+          inputs: {
+            institution,
+            module: targetModule,
+            project: project,
+            dashboard_url: origin,
+          },
+        }),
+      }
+    );
+  }
 
   if (!response.ok) {
     const details = await response.text();
@@ -224,13 +287,22 @@ app.post('/api/github/dispatch', async (req, res) => {
 
   const dispatchedAt = new Date().toISOString();
   const pagesUrl = `https://${repository.split('/')[0]}.github.io/${repository.split('/')[1]}/`;
+  const actionsUrl = `https://github.com/${repository}/actions/workflows/${workflow}`;
+
+  recentDispatches.set(idempotencyKey, {
+    timestamp: now,
+    dispatchedAt,
+    workflow,
+    pagesUrl,
+    actionsUrl,
+  });
 
   res.json({
     ok: true,
     dispatchedAt,
     workflow,
     pagesUrl,
-    actionsUrl: `https://github.com/${repository}/actions/workflows/${workflow}`,
+    actionsUrl,
     message: 'GitHub Actions started successfully. The dashboard will monitor the run automatically.',
   });
 });
@@ -355,6 +427,125 @@ const resultResponse = await fetch(
   } catch (error) {
     res.status(500).json({ error: `GitHub status check failed: ${error.message}` });
   }
+});
+
+app.get('/:institution/:module', (req, res, next) => {
+  const rawInst = req.params.institution;
+  const rawMod = req.params.module;
+
+  if (['api', 'reports', 'auth'].includes(String(rawInst).toLowerCase())) {
+    return next();
+  }
+
+  const instParam = decodeURIComponent(String(rawInst || '')).trim().toLowerCase();
+  const modParam = decodeURIComponent(String(rawMod || '')).trim().replace(/\s+/g, '+').toLowerCase();
+
+  const institutions = loadInstitutions();
+  const matchedKey = Object.keys(institutions).find(
+    (key) => key.toLowerCase() === instParam
+  );
+
+  // Validate Institution
+  if (!matchedKey) {
+    const supportedList = Object.values(institutions)
+      .map(
+        (i) =>
+          `<li><strong>${escapeHtml(i.label)}</strong> (<code>${escapeHtml(i.id)}</code>) &rarr; <a href="/${encodeURIComponent(i.id)}/alllogin+signup">/${escapeHtml(i.id)}/alllogin+signup</a></li>`
+      )
+      .join('');
+
+    res.status(400).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invalid Institution - Test Console</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .error-shell { max-width: 680px; margin: 4rem auto; padding: 2rem; background: var(--panel, #182029); border: 1px solid #ef4444; border-radius: 16px; color: var(--text, #e8eef4); font-family: "Segoe UI", sans-serif; box-shadow: 0 12px 36px rgba(0,0,0,0.4); }
+    .error-shell h1 { color: #f87171; font-size: 1.6rem; margin-top: 0; }
+    .error-shell code { background: #10161c; padding: 0.2rem 0.5rem; border-radius: 6px; color: #38bdf8; font-size: 0.9em; }
+    .error-shell ul { margin: 1.5rem 0; padding-left: 1.5rem; line-height: 2; }
+    .error-shell a { color: #38bdf8; text-decoration: none; }
+    .error-shell a:hover { text-decoration: underline; }
+    .back-btn { display: inline-block; margin-top: 1rem; padding: 10px 18px; background: #3d9cf0; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body style="background: var(--bg, #0f1419); margin: 0; padding: 1rem;">
+  <div class="error-shell">
+    <h1>Error: Unsupported Institution</h1>
+    <p>The requested institution <code>${escapeHtml(rawInst)}</code> is not recognized.</p>
+    <p>Please use one of the supported institutions:</p>
+    <ul>${supportedList}</ul>
+    <a href="/" class="back-btn">&larr; Return to Dashboard</a>
+  </div>
+</body>
+</html>`);
+    return;
+  }
+
+  // Validate Module
+  const isSupportedModule = modParam === 'alllogin+signup' || modParam === 'all';
+  if (!isSupportedModule) {
+    res.status(400).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invalid Module - Test Console</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .error-shell { max-width: 680px; margin: 4rem auto; padding: 2rem; background: var(--panel, #182029); border: 1px solid #ef4444; border-radius: 16px; color: var(--text, #e8eef4); font-family: "Segoe UI", sans-serif; box-shadow: 0 12px 36px rgba(0,0,0,0.4); }
+    .error-shell h1 { color: #f87171; font-size: 1.6rem; margin-top: 0; }
+    .error-shell code { background: #10161c; padding: 0.2rem 0.5rem; border-radius: 6px; color: #38bdf8; font-size: 0.9em; }
+    .error-shell a { color: #38bdf8; text-decoration: none; }
+    .error-shell a:hover { text-decoration: underline; }
+    .back-btn { display: inline-block; margin-top: 1rem; padding: 10px 18px; background: #3d9cf0; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body style="background: var(--bg, #0f1419); margin: 0; padding: 1rem;">
+  <div class="error-shell">
+    <h1>Error: Unsupported Module</h1>
+    <p>The module <code>${escapeHtml(rawMod)}</code> is not valid. The automated test suite requires module <code>alllogin+signup</code> to execute all login and signup tests together.</p>
+    <p>Correct URL for ${escapeHtml(institutions[matchedKey].label)}:</p>
+    <p><a href="/${encodeURIComponent(matchedKey)}/alllogin+signup">/${escapeHtml(matchedKey)}/alllogin+signup</a></p>
+    <a href="/" class="back-btn">&larr; Return to Dashboard</a>
+  </div>
+</body>
+</html>`);
+    return;
+  }
+
+  // Device from query (?device=... or ?project=...) - Default is "Desktop Chrome"
+  const rawDevice = req.query.device || req.query.project;
+  let selectedDevice = 'Desktop Chrome';
+  if (rawDevice) {
+    const devLower = String(rawDevice).toLowerCase();
+    if (devLower.includes('mobile')) {
+      selectedDevice = 'Mobile Chrome';
+    } else if (devLower.includes('tablet')) {
+      selectedDevice = 'Tablet';
+    } else if (devLower === 'all' || devLower === 'all devices') {
+      selectedDevice = '';
+    }
+  }
+
+  const institutionObj = institutions[matchedKey];
+  const autoConfig = {
+    institutionId: matchedKey,
+    institutionLabel: institutionObj.label,
+    loginUrl: institutionObj.loginUrl,
+    signupUrl: institutionObj.signupUrl,
+    module: 'alllogin+signup',
+    project: selectedDevice,
+    autoRun: true,
+  };
+
+  const html = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
+  const safeConfig = JSON.stringify(autoConfig).replace(/</g, '\\u003c');
+  const injected = `<script id="autoTestBootstrap">window.AUTO_TEST_CONFIG = ${safeConfig};</script>`;
+
+  res.send(html.replace('</head>', `${injected}</head>`));
 });
 
 app.get('/', (_req, res) => {

@@ -24,7 +24,56 @@
   </a>
 </header>
 
-      <section class="panel">
+      <!-- Auto-Execution Target Panel (Visible for /{institution}/{module} URLs) -->
+      <section class="panel auto-panel" id="autoTargetPanel" hidden>
+        <div class="target-card">
+          <div class="target-item">
+            <span class="target-label">Target Institution</span>
+            <div class="target-value"><strong id="autoInstLabel">Loading...</strong></div>
+          </div>
+          <div class="target-item">
+            <span class="target-label">Active Module</span>
+            <div class="target-value">
+              <span class="pill-badge" id="autoModuleLabel">All Login + Signup (42 Cases)</span>
+            </div>
+          </div>
+          <div class="target-item device-item">
+            <label class="field" for="autoProject">
+              <span>Device / Browser</span>
+              <select id="autoProject">
+                <option value="Desktop Chrome" selected>Desktop Chrome (Default)</option>
+                <option value="Mobile Chrome">Mobile Chrome</option>
+                <option value="">All devices (Desktop, Tablet, Mobile)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="auto-indicator">
+          <span class="pulse-dot"></span>
+          <span id="autoExecNote">Automated execution triggered via URL — running login and signup test suites.</span>
+        </div>
+
+        <div class="urls" id="autoUrls"></div>
+
+        <div class="actions" style="margin-top: 10px;">
+          <button id="rerunAuto" type="button" class="ghost" style="display: none;">
+            Re-run Tests
+          </button>
+        </div>
+      </section>
+
+      <!-- Manual Panel (For homepage navigation / backward compatibility) -->
+      <section class="panel" id="manualPanel">
+        <div class="quick-launch-box">
+          <div class="quick-launch-title">Direct Auto-Execution URLs</div>
+          <div class="quick-launch-links">
+            <a href="/happyprancer/alllogin+signup" class="quick-link">HappyPrancer &rarr; /happyprancer/alllogin+signup</a>
+            <a href="/bworkz/alllogin+signup" class="quick-link">Bworkz &rarr; /bworkz/alllogin+signup</a>
+            <a href="/awsaiapp/alllogin+signup" class="quick-link">AWSAIAPP &rarr; /awsaiapp/alllogin+signup</a>
+          </div>
+        </div>
+
         <label class="field">
           <span>Institution</span>
           <select id="institution"></select>
@@ -33,9 +82,9 @@
         <label class="field">
           <span>Module</span>
           <select id="module">
-            <<option value="all">All Login + Signup Cases (42)</option>
+            <option value="all">All Login + Signup Cases (42)</option>
             <option value="login">All Login Cases (LOGIN-001 to LOGIN-020)</option>
-           <option value="signup">All Signup Cases (SIGNUP-001 to SIGNUP-022)</option>
+            <option value="signup">All Signup Cases (SIGNUP-001 to SIGNUP-022)</option>
             <option value="payment">HappyPrancer Payment Cases</option>
           </select>
         </label>
@@ -43,8 +92,9 @@
         <label class="field">
           <span>Devices</span>
           <select id="project">
+            <option value="Desktop Chrome" selected>Desktop Chrome (Default)</option>
+            <option value="Mobile Chrome">Mobile Chrome</option>
             <option value="">All devices (Desktop, Tablet, Mobile)</option>
-            <option value="Desktop Chrome">Desktop Chrome only</option>
           </select>
         </label>
 

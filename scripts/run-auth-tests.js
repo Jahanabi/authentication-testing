@@ -48,7 +48,11 @@ function parseArgs(argv) {
  * Select Playwright spec files
  */
 function getSpecFiles(moduleName) {
-  switch (String(moduleName || 'all').toLowerCase()) {
+  const normalized = String(moduleName || 'all')
+    .toLowerCase()
+    .replace(/\s+/g, '+');
+
+  switch (normalized) {
     case 'login':
       return ['tests/login.spec.ts'];
 
@@ -56,6 +60,7 @@ function getSpecFiles(moduleName) {
       return ['tests/signup.spec.ts'];
 
     case 'all':
+    case 'alllogin+signup':
       return [
         'tests/login.spec.ts',
         'tests/signup.spec.ts',
@@ -63,7 +68,7 @@ function getSpecFiles(moduleName) {
 
     default:
       throw new Error(
-        'Module must be login, signup, or all'
+        `Module must be login, signup, all, or alllogin+signup (received: "${moduleName}")`
       );
   }
 }

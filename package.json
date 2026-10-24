@@ -5,6 +5,7 @@
     "test:login": "node scripts/run-auth-tests.js --module login",
     "test:signup": "node scripts/run-auth-tests.js --module signup",
     "test:auth": "node scripts/run-auth-tests.js --module all",
+    "test:alllogin+signup": "node scripts/run-auth-tests.js --module alllogin+signup",
     "test:institution": "node scripts/run-auth-tests.js",
     "report:login": "playwright show-report reports/html",
     "report:excel": "node generate-excel-report.js",
