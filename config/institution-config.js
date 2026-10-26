@@ -109,11 +109,17 @@ function requiredFields(moduleName) {
     ['signupPassword', 'SIGNUP_PASSWORD'],
   ];
 
-  switch (String(moduleName || 'all').toLowerCase()) {
+  const normalized = String(moduleName || 'all')
+    .toLowerCase()
+    .replace(/\s+/g, '+');
+
+  switch (normalized) {
     case 'login':
       return login;
     case 'signup':
       return signup;
+    case 'all':
+    case 'alllogin+signup':
     default:
       return [...login, ...signup];
   }

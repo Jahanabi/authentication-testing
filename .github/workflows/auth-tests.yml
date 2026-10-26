@@ -17,10 +17,11 @@ on:
         required: true
         type: choice
         options:
+          - alllogin+signup
           - all
           - login
           - signup
-        default: all
+        default: alllogin+signup
       project:
         description: Playwright project (leave empty to run Desktop, Tablet, and Mobile)
         required: false
